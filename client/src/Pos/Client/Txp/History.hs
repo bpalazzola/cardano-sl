@@ -49,9 +49,11 @@ import           Pos.Chain.Txp (ToilVerFailure, Tx (..), TxAux (..), TxId,
 import           Pos.Core (Address, ChainDifficulty, Timestamp (..),
                      difficultyL)
 import           Pos.Core.JsonLog (CanJsonLog (..))
+import           Pos.Core.Slotting (getEpochOrSlot)
 import           Pos.Crypto (WithHash (..), withHash)
 import           Pos.DB (MonadDBRead, MonadGState)
 import           Pos.DB.Block (getBlock)
+import           Pos.DB.BlockIndex (getTipHeader)
 import           Pos.DB.Txp (MempoolExt, MonadTxpLocal, MonadTxpMem, buildUtxo,
                      getLocalTxs, txpProcessTx, withTxpLocalData)
 import qualified Pos.GState as GS
@@ -276,7 +278,8 @@ saveTxDefault :: TxHistoryEnv ctx m
               -> TxpConfiguration
               -> (TxId, TxAux) -> m ()
 saveTxDefault genesisConfig txpConfig txw = do
-    res <- txpProcessTx genesisConfig txpConfig txw
+    eos <- getEpochOrSlot <$> getTipHeader
+    res <- txpProcessTx genesisConfig eos txpConfig txw
     eitherToThrow (first SaveTxToilFailure res)
 
 txHistoryListToMap :: [TxHistoryEntry] -> Map TxId TxHistoryEntry

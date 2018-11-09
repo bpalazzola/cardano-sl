@@ -71,7 +71,7 @@ txProcessTransaction
     -> m (Either ToilVerFailure ())
 txProcessTransaction genesisConfig eos txpConfig itw =
     withStateLock LowPriority ProcessTransaction $
-        \_tip -> txProcessTransactionNoLock genesisConfig txpConfig itw
+        \_tip -> txProcessTransactionNoLock genesisConfig eos txpConfig itw
 
 -- | Unsafe version of 'txProcessTransaction' which doesn't take a
 -- lock. Can be used in tests.
@@ -81,10 +81,11 @@ txProcessTransactionNoLock
        , MempoolExt m ~ ()
        )
     => Genesis.Config
+    -> EpochOrSlot
     -> TxpConfiguration
     -> (TxId, TxAux)
     -> m (Either ToilVerFailure ())
-txProcessTransactionNoLock genesisConfig txpConfig = txProcessTransactionAbstract
+txProcessTransactionNoLock genesisConfig _eos txpConfig = txProcessTransactionAbstract
     (configEpochSlots genesisConfig)
     buildContext
     processTxHoisted
@@ -94,11 +95,11 @@ txProcessTransactionNoLock genesisConfig txpConfig = txProcessTransactionAbstrac
 
     processTxHoisted ::
            BlockVersionData
+        -> EpochOrSlot
         -> EpochIndex
         -> (TxId, TxAux)
         -> ExceptT ToilVerFailure (ExtendedLocalToilM () ()) TxUndo
-    processTxHoisted bvd = do
-        eos <- getEpochOrSlot <$> getTipHeader
+    processTxHoisted bvd eos = do
         mapExceptT extendLocalToilM
             ... (processTx (configProtocolMagic genesisConfig) eos txpConfig bvd)
 
@@ -107,7 +108,7 @@ txProcessTransactionAbstract ::
        (TxpLocalWorkMode ctx m, MempoolExt m ~ extraState)
     => SlotCount
     -> (Utxo -> TxAux -> m extraEnv)
-    -> (BlockVersionData -> EpochIndex -> (TxId, TxAux) -> ExceptT ToilVerFailure (ExtendedLocalToilM extraEnv extraState) a)
+    -> (BlockVersionData -> EpochOrSlot -> EpochIndex -> (TxId, TxAux) -> ExceptT ToilVerFailure (ExtendedLocalToilM extraEnv extraState) a)
     -> (TxId, TxAux)
     -> m (Either ToilVerFailure ())
 txProcessTransactionAbstract epochSlots buildEnv txAction itw@(txId, txAux) = reportTipMismatch $ runExceptT $ do
@@ -133,12 +134,13 @@ txProcessTransactionAbstract epochSlots buildEnv txAction itw@(txId, txAux) = re
     bvd <- gsAdoptedBVData
     let env = (utxoToLookup utxo, extraEnv)
 
+    eos <- getEpochOrSlot <$> getTipHeader
     pRes <- lift . withTxpLocalDataLog $ \txpData -> do
         mp <- lift $ getMemPool txpData
         undo <- lift $ getLocalUndos txpData
         tip <- lift $ STM.readTVar (txpTip txpData)
         extra <- lift $ getTxpExtra txpData
-        tm <- hoist generalize $ processTransactionPure bvd epoch env tipDB itw (utxoModifier, mp, undo, tip, extra)
+        tm <- hoist generalize $ processTransactionPure bvd eos epoch env tipDB itw (utxoModifier, mp, undo, tip, extra)
         forM tm $ lift . setTxpLocalData txpData
     -- We report 'ToilTipsMismatch' as an error, because usually it
     -- should't happen. If it happens, it's better to look at logs.
@@ -152,13 +154,14 @@ txProcessTransactionAbstract epochSlots buildEnv txAction itw@(txId, txAux) = re
   where
     processTransactionPure
         :: BlockVersionData
+        -> EpochOrSlot
         -> EpochIndex
         -> (UtxoLookup, extraEnv)
         -> HeaderHash
         -> (TxId, TxAux)
         -> (UtxoModifier, MemPool, UndoMap, HeaderHash, extraState)
         -> NamedPureLogger Identity (Either ToilVerFailure (UtxoModifier, MemPool, UndoMap, HeaderHash, extraState))
-    processTransactionPure bvd curEpoch env tipDB tx (um, mp, undo, tip, extraState)
+    processTransactionPure bvd eos curEpoch env tipDB tx (um, mp, undo, tip, extraState)
         | tipDB /= tip = pure . Left $ ToilTipsMismatch tipDB tip
         | otherwise = do
             let initialState = LocalToilState { _ltsMemPool = mp
@@ -169,7 +172,7 @@ txProcessTransactionAbstract epochSlots buildEnv txAction itw@(txId, txAux) = re
                     usingStateT (initialState, extraState) $
                     usingReaderT env $
                     runExceptT $
-                    txAction bvd curEpoch tx
+                    txAction bvd eos curEpoch tx
             case res of
                 (Left er, _) -> pure $ Left er
                 (Right _, (LocalToilState {..}, newExtraState)) -> pure $ Right

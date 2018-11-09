@@ -32,6 +32,7 @@ import           Pos.Chain.Update (BlockVersionData, UpdateProposal (..),
 import           Pos.Communication (NodeId)
 import           Pos.Core (StakeholderId, addressHash)
 import           Pos.Core.Chrono (NE, NewestFirst, OldestFirst)
+import           Pos.Core.Slotting (getEpochOrSlot)
 import           Pos.Crypto (hash)
 import qualified Pos.DB.Block as Block
 import qualified Pos.DB.Block as DB (getTipBlock)
@@ -158,11 +159,14 @@ logicFull genesisConfig txpConfig ourStakeholderId securityParams jsonLogTx =
         postPskHeavy :: ProxySKHeavy -> m Bool
         postPskHeavy = Delegation.handlePsk genesisConfig
 
+
         postTx = KeyVal
             { toKey = pure . Tagged . hash . taTx . getTxMsgContents
             , handleInv = \(Tagged txId) -> not . HM.member txId . _mpLocalTxs <$> withTxpLocalData getMemPool
             , handleReq = \(Tagged txId) -> fmap TxMsgContents . HM.lookup txId . _mpLocalTxs <$> withTxpLocalData getMemPool
-            , handleData = \(TxMsgContents txAux) -> Txp.handleTxDo genesisConfig txpConfig jsonLogTx txAux
+            , handleData = \(TxMsgContents txAux) -> do
+                eos <- getEpochOrSlot <$> getTipHeader
+                Txp.handleTxDo genesisConfig eos txpConfig jsonLogTx txAux
             }
 
         postUpdate = KeyVal

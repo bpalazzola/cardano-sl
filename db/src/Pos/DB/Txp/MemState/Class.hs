@@ -34,8 +34,9 @@ import           Pos.Chain.Genesis as Genesis (Config)
 import           Pos.Chain.Txp (MemPool (..), ToilVerFailure, TxAux, TxId,
                      TxpConfiguration, UndoMap, UtxoModifier)
 import           Pos.Core.Reporting (MonadReporting)
-import           Pos.Core.Slotting (MonadSlots (..))
+import           Pos.Core.Slotting (EpochOrSlot, MonadSlots (..))
 import           Pos.DB.Class (MonadDBRead, MonadGState (..))
+
 import           Pos.DB.Txp.MemState.Types (GenericTxpLocalData (..))
 import           Pos.Util.Util (HasLens (..))
 import           Pos.Util.Wlog (NamedPureLogger, WithLogger, launchNamedPureLog)
@@ -129,7 +130,7 @@ type family MempoolExt (m :: * -> *) :: *
 
 class Monad m => MonadTxpLocal m where
     txpNormalize :: Genesis.Config -> TxpConfiguration -> m ()
-    txpProcessTx :: Genesis.Config -> TxpConfiguration -> (TxId, TxAux) -> m (Either ToilVerFailure ())
+    txpProcessTx :: Genesis.Config -> EpochOrSlot -> TxpConfiguration -> (TxId, TxAux) -> m (Either ToilVerFailure ())
 
 type TxpLocalWorkMode ctx m =
     ( MonadIO m
