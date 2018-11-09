@@ -38,9 +38,10 @@ import           Pos.Core (EpochIndex, SlotCount, siEpoch)
 import           Pos.Core.JsonLog (CanJsonLog (..))
 import           Pos.Core.JsonLog.LogEvents (MemPoolModifyReason (..))
 import           Pos.Core.Reporting (reportError)
-import           Pos.Core.Slotting (MonadSlots (..))
+import           Pos.Core.Slotting (MonadSlots (..), EpochOrSlot, getEpochOrSlot)
 import           Pos.Crypto (WithHash (..))
 import           Pos.DB.Class (MonadGState (..))
+import           Pos.DB.BlockIndex (getTipHeader)
 import qualified Pos.DB.GState.Common as GS
 import           Pos.DB.GState.Lock (Priority (..), StateLock, StateLockMetrics,
                      withStateLock)
@@ -66,9 +67,11 @@ type TxpProcessTransactionMode ctx m =
 -- only.
 txProcessTransaction
     :: ( TxpProcessTransactionMode ctx m)
-    => Genesis.Config -> TxpConfiguration -> (TxId, TxAux) -> m (Either ToilVerFailure ())
-txProcessTransaction genesisConfig txpConfig itw =
-    withStateLock LowPriority ProcessTransaction $ \__tip -> txProcessTransactionNoLock genesisConfig txpConfig itw
+    => Genesis.Config -> EpochOrSlot -> TxpConfiguration -> (TxId, TxAux)
+    -> m (Either ToilVerFailure ())
+txProcessTransaction genesisConfig eos txpConfig itw =
+    withStateLock LowPriority ProcessTransaction $
+        \_tip -> txProcessTransactionNoLock genesisConfig txpConfig itw
 
 -- | Unsafe version of 'txProcessTransaction' which doesn't take a
 -- lock. Can be used in tests.
@@ -94,9 +97,10 @@ txProcessTransactionNoLock genesisConfig txpConfig = txProcessTransactionAbstrac
         -> EpochIndex
         -> (TxId, TxAux)
         -> ExceptT ToilVerFailure (ExtendedLocalToilM () ()) TxUndo
-    processTxHoisted bvd =
+    processTxHoisted bvd = do
+        eos <- getEpochOrSlot <$> getTipHeader
         mapExceptT extendLocalToilM
-            ... (processTx (configProtocolMagic genesisConfig) txpConfig bvd)
+            ... (processTx (configProtocolMagic genesisConfig) eos txpConfig bvd)
 
 txProcessTransactionAbstract ::
        forall extraEnv extraState ctx m a.
@@ -186,21 +190,23 @@ txNormalize
        , MempoolExt m ~ ()
        )
     => Genesis.Config -> TxpConfiguration -> m ()
-txNormalize genesisConfig txpConfig =
+txNormalize genesisConfig txpConfig = do
+    eos <- getEpochOrSlot <$> getTipHeader
     txNormalizeAbstract (configEpochSlots genesisConfig) buildContext
-        $ normalizeToilHoisted
+        (normalizeToilHoisted eos)
   where
     buildContext :: Utxo -> [TxAux] -> m ()
     buildContext _ _ = pure ()
 
     normalizeToilHoisted
-        :: BlockVersionData
+        :: EpochOrSlot
+        -> BlockVersionData
         -> EpochIndex
         -> HashMap TxId TxAux
         -> ExtendedLocalToilM () () ()
-    normalizeToilHoisted bvd epoch txs =
+    normalizeToilHoisted eos bvd epoch txs =
         extendLocalToilM
-            $ normalizeToil (configProtocolMagic genesisConfig) txpConfig bvd epoch
+            $ normalizeToil (configProtocolMagic genesisConfig) eos txpConfig bvd epoch
             $ HM.toList txs
 
 txNormalizeAbstract ::

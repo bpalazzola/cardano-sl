@@ -58,6 +58,7 @@ import           Pos.Chain.Update.Proof (UpdateProof, mkUpdateProof)
 import           Pos.Chain.Update.SoftwareVersion (HasSoftwareVersion (..),
                      SoftwareVersion, checkSoftwareVersion)
 import           Pos.Core.Attributes (Attributes, areAttributesKnown)
+import           Pos.Core.Slotting (EpochOrSlot)
 import           Pos.Crypto (Hash, ProtocolMagic, hash)
 
 -- | Proof of everything contained in the payload.
@@ -196,10 +197,11 @@ instance SafeCopy MainBody where
 verifyMainBody
     :: MonadError Text m
     => ProtocolMagic
+    -> EpochOrSlot
     -> MainBody
     -> m ()
-verifyMainBody pm MainBody {..} = do
-    checkTxPayload _mbTxPayload
+verifyMainBody pm eos MainBody {..} = do
+    checkTxPayload eos _mbTxPayload
     checkSscPayload pm _mbSscPayload
     checkDlgPayload pm _mbDlgPayload
     checkUpdatePayload pm _mbUpdatePayload

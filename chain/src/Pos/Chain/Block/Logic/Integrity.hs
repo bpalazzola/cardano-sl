@@ -269,12 +269,13 @@ instance NFData VerifyBlockParams
 -- 3.  (Optional) No block has any unknown attributes.
 verifyBlock
     :: Genesis.Config
+    -> EpochOrSlot
     -> VerifyBlockParams
     -> Block
     -> VerificationRes
-verifyBlock genesisConfig VerifyBlockParams {..} blk = mconcat
+verifyBlock genesisConfig eos VerifyBlockParams {..} blk = mconcat
     [ verifyFromEither "internal block consistency"
-                       (verifyBlockInternal genesisConfig blk)
+                       (verifyBlockInternal genesisConfig eos blk)
     , verifyHeader (configProtocolMagic genesisConfig)
                    vbpVerifyHeader
                    (getBlockHeader blk)
@@ -320,13 +321,14 @@ type VerifyBlocksIter = (SlotLeaders, Maybe BlockHeader, VerificationRes)
 -- type is crucial.
 verifyBlocks
     :: Genesis.Config
+    -> EpochOrSlot
     -> Maybe SlotId
     -> Bool
     -> BlockVersionData
     -> SlotLeaders
     -> OldestFirst [] Block
     -> VerificationRes
-verifyBlocks genesisConfig curSlotId verifyNoUnknown bvd initLeaders = view _3 . foldl' step start
+verifyBlocks genesisConfig eos curSlotId verifyNoUnknown bvd initLeaders = view _3 . foldl' step start
   where
     start :: VerifyBlocksIter
     -- Note that here we never know previous header before this
@@ -355,4 +357,4 @@ verifyBlocks genesisConfig curSlotId verifyNoUnknown bvd initLeaders = view _3 .
                 , vbpMaxSize = bvdMaxBlockSize bvd
                 , vbpVerifyNoUnknown = verifyNoUnknown
                 }
-        in (newLeaders, Just $ getBlockHeader blk, res <> verifyBlock genesisConfig vbp blk)
+        in (newLeaders, Just $ getBlockHeader blk, res <> verifyBlock genesisConfig eos vbp blk)

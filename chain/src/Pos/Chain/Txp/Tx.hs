@@ -42,9 +42,11 @@ import           Pos.Binary.Class (Bi (..), Case (..), Cons (..), Field (..),
                      deriveSimpleBi, encodeKnownCborDataItem, encodeListLen,
                      encodeUnknownCborDataItem, enforceSize,
                      knownCborDataItemSizeExpr, szCases)
-import           Pos.Core.Attributes (Attributes, areAttributesKnown)
+import           Pos.Core.Attributes (Attributes, areAttributesKnown,
+                     unknownAttributesLength)
 import           Pos.Core.Common (Address (..), Coin (..), checkCoin, coinF,
                      coinToInteger, decodeTextAddress, integerToCoin)
+import           Pos.Core.Slotting (EpochOrSlot)
 import           Pos.Core.Util.LogSafe (SecureLog (..))
 import           Pos.Crypto (Hash, decodeAbstractHash, hash, hashHexF,
                      shortHashF)
@@ -99,9 +101,10 @@ txF = build
 -- | Verify inputs and outputs are non empty; have enough coins.
 checkTx
     :: MonadError Text m
-    => Tx
+    => EpochOrSlot
+    -> Tx
     -> m ()
-checkTx it =
+checkTx eos it =
     case verRes of
         VerSuccess -> pure ()
         failure    -> throwError $ verResSingleF failure
@@ -120,7 +123,15 @@ checkTx it =
                 ("output #"%int%" has invalid coin")
                 i
           )
+        , ( eos > someLimit && unknownAttributesLength (_txAttributes it) > 1024
+          , sformat
+                ("size of unknown attribute in input #"%int%" is too large")
+                i
+          )
         ]
+
+someLimit :: EpochOrSlot
+someLimit = error "someLimit :: EpochOrSlot"
 
 --------------------------------------------------------------------------------
 -- TxId

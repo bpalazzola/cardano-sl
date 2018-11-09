@@ -45,7 +45,7 @@ import           Pos.Core.Chrono (NE, NewestFirst (getNewestFirst),
                      OldestFirst (..), toOldestFirst, _OldestFirst)
 import           Pos.Core.Exception (assertionFailed, reportFatalError)
 import           Pos.Core.NetworkMagic (NetworkMagic (..))
-import           Pos.Core.Slotting (MonadSlots, SlotId)
+import           Pos.Core.Slotting (MonadSlots, SlotId, getEpochOrSlot)
 import           Pos.DB (SomeBatchOp (..))
 import           Pos.DB.Block.BListener (MonadBListener (..))
 import qualified Pos.DB.Block.GState.BlockExtra as GS
@@ -136,6 +136,7 @@ slogVerifyBlocks
     -> m (Either Text (OldestFirst NE SlogUndo))
 slogVerifyBlocks genesisConfig curSlot blocks = runExceptT $ do
     era <- getConsensusEra
+    eos <- getEpochOrSlot <$> DB.getTipHeader
     logInfo $ sformat ("slogVerifyBlocks: Consensus era is " % shown) era
     (adoptedBV, adoptedBVD) <- lift getAdoptedBVFull
     let dataMustBeKnown = mustDataBeKnown adoptedBV
@@ -161,6 +162,7 @@ slogVerifyBlocks genesisConfig curSlot blocks = runExceptT $ do
     verResToMonadError formatAllErrors $
         verifyBlocks
             genesisConfig
+            eos
             curSlot
             dataMustBeKnown
             adoptedBVD

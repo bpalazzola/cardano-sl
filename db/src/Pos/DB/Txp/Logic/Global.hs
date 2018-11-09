@@ -36,9 +36,10 @@ import           Pos.Chain.Txp (ExtendedGlobalToilM, GlobalToilEnv (..),
                      verifyToil)
 import           Pos.Core (epochIndexL)
 import           Pos.Core.Chrono (NE, NewestFirst (..), OldestFirst (..))
+import           Pos.Core.Slotting (EpochOrSlot, getEpochOrSlot)
 import           Pos.Core.Exception (assertionFailed)
 import           Pos.Crypto (ProtocolMagic)
-import           Pos.DB (SomeBatchOp (..))
+import           Pos.DB (SomeBatchOp (..), getTipHeader)
 import           Pos.DB.Class (gsAdoptedBVData)
 import           Pos.DB.GState.Stakes (getRealStake, getRealTotalStake)
 import           Pos.DB.Txp.Logic.Common (buildUtxo, buildUtxoForRollback)
@@ -82,16 +83,17 @@ verifyBlocks ::
     -> m $ Either ToilVerFailure $ OldestFirst NE TxpUndo
 verifyBlocks pm txpConfig verifyAllIsKnown newChain = runExceptT $ do
     bvd <- gsAdoptedBVData
-    let verifyPure :: [TxAux] -> UtxoM (Either ToilVerFailure TxpUndo)
-        verifyPure = runExceptT
-            . verifyToil pm bvd (tcAssetLockedSrcAddrs txpConfig) epoch verifyAllIsKnown
-        foldStep ::
-               (UtxoModifier, [TxpUndo])
+    let verifyPure :: EpochOrSlot -> [TxAux] -> UtxoM (Either ToilVerFailure TxpUndo)
+        verifyPure eos = runExceptT
+            . verifyToil pm eos bvd (tcAssetLockedSrcAddrs txpConfig) epoch verifyAllIsKnown
+        foldStep
+            :: (UtxoModifier, [TxpUndo])
             -> TxpBlock
             -> ExceptT ToilVerFailure m (UtxoModifier, [TxpUndo])
         foldStep (modifier, undos) (convertPayload -> txAuxes) = do
+            eos <- getEpochOrSlot <$> lift getTipHeader
             baseUtxo <- utxoToLookup <$> buildUtxo modifier txAuxes
-            case runUtxoM modifier baseUtxo (verifyPure txAuxes) of
+            case runUtxoM modifier baseUtxo (verifyPure eos txAuxes) of
                 (Left err, _) -> throwError err
                 (Right txpUndo, newModifier) ->
                     return (newModifier, txpUndo : undos)

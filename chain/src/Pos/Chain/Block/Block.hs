@@ -104,7 +104,7 @@ import           Pos.Chain.Update.SoftwareVersion (HasSoftwareVersion (..),
 import           Pos.Core.Attributes (mkAttributes)
 import           Pos.Core.Common (ChainDifficulty, HasDifficulty (..),
                      SlotLeaders, slotLeadersF)
-import           Pos.Core.Slotting (EpochIndex, HasEpochIndex (..),
+import           Pos.Core.Slotting (EpochIndex, EpochOrSlot, HasEpochIndex (..),
                      HasEpochOrSlot (..), SlotId (..))
 import           Pos.Crypto (Hash, ProtocolMagic, PublicKey, SecretKey, hash)
 import           Pos.Util.Some (Some (..))
@@ -135,10 +135,11 @@ getBlockHeader = \case
 verifyBlockInternal
     :: MonadError Text m
     => Genesis.Config
+    -> EpochOrSlot
     -> Block
     -> m ()
-verifyBlockInternal genesisConfig =
-    either verifyGenesisBlock (verifyMainBlock genesisConfig)
+verifyBlockInternal genesisConfig eos =
+    either verifyGenesisBlock (verifyMainBlock genesisConfig eos)
 
 
 --------------------------------------------------------------------------------
@@ -323,12 +324,13 @@ mkMainBlockExplicit pm bv sv prevHash difficulty slotId sk pske body =
 verifyMainBlock
     :: MonadError Text m
     => Genesis.Config
+    -> EpochOrSlot
     -> MainBlock
     -> m ()
-verifyMainBlock genesisConfig GenericBlock {..} = do
+verifyMainBlock genesisConfig eos GenericBlock {..} = do
     let pm = configProtocolMagic genesisConfig
     verifyMainBlockHeader pm _gbHeader
-    verifyMainBody pm _gbBody
+    verifyMainBody pm eos _gbBody
     -- No need to verify the main extra body data. It's an 'Attributes ()'
     -- which is valid whenever it's well-formed.
     --

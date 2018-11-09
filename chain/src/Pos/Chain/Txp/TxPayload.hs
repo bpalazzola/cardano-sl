@@ -15,6 +15,7 @@ import           Control.Monad.Except (MonadError)
 import           Data.SafeCopy (base, deriveSafeCopySimple)
 
 import           Pos.Binary.Class (Bi (..))
+import           Pos.Core.Slotting (EpochOrSlot)
 import           Pos.Chain.Txp.Tx
 import           Pos.Chain.Txp.TxAux
 import           Pos.Chain.Txp.TxWitness
@@ -52,7 +53,7 @@ instance Bi TxPayload where
     decode = mkTxPayload <$> decode
 
 -- | Check a TxPayload by checking all of the Txs it contains.
-checkTxPayload :: MonadError Text m => TxPayload -> m ()
-checkTxPayload it = forM_ (_txpTxs it) checkTx
+checkTxPayload :: MonadError Text m => EpochOrSlot -> TxPayload -> m ()
+checkTxPayload eos it = mapM_ (checkTx eos) $ _txpTxs it
 
 deriveSafeCopySimple 0 'base ''TxPayload
