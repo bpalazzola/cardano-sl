@@ -25,6 +25,7 @@ import           Pos.Chain.Txp (Tx (..), TxIn (..), TxOut (..), checkTx,
                      topsortTxs)
 import           Pos.Core (mkCoin)
 import           Pos.Core.Attributes (mkAttributes)
+import           Pos.Core.Slotting (EpochOrSlot)
 import           Pos.Crypto (hash, whData, withHash)
 import           Pos.Util (_neHead)
 
@@ -58,12 +59,12 @@ spec = describe "Txp.Core" $ do
     description_checkTxBad =
         "doesn't create Tx with non-positive coins in outputs"
 
-checkTxGood :: Tx -> Bool
-checkTxGood = isRight . checkTx
+checkTxGood :: Tx -> EpochOrSlot -> Bool
+checkTxGood tx eos = isRight $ checkTx eos tx
 
-checkTxBad :: Tx -> Bool
-checkTxBad UnsafeTx {..} =
-    all (\outs -> isLeft $ checkTx (UnsafeTx _txInputs outs _txAttributes)) badOutputs
+checkTxBad :: Tx -> EpochOrSlot -> Bool
+checkTxBad UnsafeTx {..} eos =
+    all (\outs -> isLeft $ checkTx eos (UnsafeTx _txInputs outs _txAttributes)) badOutputs
   where
     invalidateOut :: TxOut -> TxOut
     invalidateOut out = out {txOutValue = mkCoin 0}
@@ -144,6 +145,7 @@ txGen size = do
         NE.fromList <$> (replicateM outputsN $ TxOut <$> arbitrary <*> arbitrary)
     let tx = UnsafeTx inputs outputs (mkAttributes ())
     -- FIXME can't we convince ourselves that the Tx we made is valid?
-    case checkTx tx of
+    eos <- arbitrary
+    case checkTx eos tx of
         Left e   -> error $ "txGen: something went wrong: " <> e
         Right () -> pure tx

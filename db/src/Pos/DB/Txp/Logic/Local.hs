@@ -192,9 +192,8 @@ txNormalize
        ( TxpLocalWorkMode ctx m
        , MempoolExt m ~ ()
        )
-    => Genesis.Config -> TxpConfiguration -> m ()
-txNormalize genesisConfig txpConfig = do
-    eos <- getEpochOrSlot <$> getTipHeader
+    => Genesis.Config -> EpochOrSlot -> TxpConfiguration -> m ()
+txNormalize genesisConfig eos txpConfig = do
     txNormalizeAbstract (configEpochSlots genesisConfig) buildContext
         (normalizeToilHoisted eos)
   where
@@ -207,9 +206,9 @@ txNormalize genesisConfig txpConfig = do
         -> EpochIndex
         -> HashMap TxId TxAux
         -> ExtendedLocalToilM () () ()
-    normalizeToilHoisted eos bvd epoch txs =
+    normalizeToilHoisted eos' bvd epoch txs =
         extendLocalToilM
-            $ normalizeToil (configProtocolMagic genesisConfig) eos txpConfig bvd epoch
+            $ normalizeToil (configProtocolMagic genesisConfig) eos' txpConfig bvd epoch
             $ HM.toList txs
 
 txNormalizeAbstract ::

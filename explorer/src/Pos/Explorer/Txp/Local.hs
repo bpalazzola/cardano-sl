@@ -18,6 +18,7 @@ import           Pos.Chain.Txp (ToilVerFailure (..), TxAux (..), TxId,
 import           Pos.Chain.Update (BlockVersionData)
 import           Pos.Core (EpochIndex, Timestamp)
 import           Pos.Core.JsonLog (CanJsonLog (..))
+import           Pos.Core.Slotting (EpochOrSlot)
 import           Pos.DB.Txp.Logic (txNormalizeAbstract,
                      txProcessTransactionAbstract)
 import           Pos.DB.Txp.MemState (MempoolExt, TxpLocalWorkMode, getTxpExtra,
@@ -48,10 +49,11 @@ eTxProcessTransaction ::
        , CanJsonLog m
        )
     => Genesis.Config
+    -> EpochOrSlot
     -> TxpConfiguration
     -> (TxId, TxAux)
     -> m (Either ToilVerFailure ())
-eTxProcessTransaction genesisConfig txpConfig itw =
+eTxProcessTransaction genesisConfig _eos txpConfig itw =
     withStateLock LowPriority ProcessTransaction
         $ \__tip -> eTxProcessTransactionNoLock genesisConfig txpConfig itw
 
@@ -66,6 +68,7 @@ eTxProcessTransactionNoLock genesisConfig txpConfig itw = getCurrentSlot epochSl
     Just slot -> do
         -- First get the current @SlotId@ so we can calculate the time.
         -- Then get when that @SlotId@ started and use that as a time for @Tx@.
+        --eos <- getEpochOrSlot <$> getTipHeader
         mTxTimestamp <- getSlotStart slot
         txProcessTransactionAbstract epochSlots
                                      buildContext
@@ -79,11 +82,13 @@ eTxProcessTransactionNoLock genesisConfig txpConfig itw = getCurrentSlot epochSl
     processTx' ::
            Maybe Timestamp
         -> BlockVersionData
+        -> EpochOrSlot
         -> EpochIndex
         -> (TxId, TxAux)
         -> ExceptT ToilVerFailure ELocalToilM ()
-    processTx' mTxTimestamp bvd epoch tx = eProcessTx
+    processTx' mTxTimestamp bvd eos epoch tx = eProcessTx
         (configProtocolMagic genesisConfig)
+        eos
         txpConfig
         bvd
         epoch
@@ -96,23 +101,26 @@ eTxProcessTransactionNoLock genesisConfig txpConfig itw = getCurrentSlot epochSl
 eTxNormalize
     :: forall ctx m . (ETxpLocalWorkMode ctx m)
     => Genesis.Config
+    -> EpochOrSlot
     -> TxpConfiguration
     -> m ()
-eTxNormalize genesisConfig txpConfig = do
+eTxNormalize genesisConfig eos txpConfig = do
     extras <- MM.insertionsMap . view eemLocalTxsExtra <$> withTxpLocalData getTxpExtra
     txNormalizeAbstract (configEpochSlots genesisConfig)
                         buildExplorerExtraLookup
-                        (normalizeToil' extras)
+                        (normalizeToil' extras eos)
   where
     normalizeToil' ::
            HashMap TxId TxExtra
+        -> EpochOrSlot
         -> BlockVersionData
         -> EpochIndex
         -> HashMap TxId TxAux
         -> ELocalToilM ()
-    normalizeToil' extras bvd epoch txs =
+    normalizeToil' extras _eos bvd epoch txs =
         let toNormalize = HM.toList $ HM.intersectionWith (,) txs extras
         in eNormalizeToil (configProtocolMagic genesisConfig)
+                          eos
                           txpConfig
                           bvd
                           epoch

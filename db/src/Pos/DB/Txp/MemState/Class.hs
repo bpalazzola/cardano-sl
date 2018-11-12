@@ -129,7 +129,7 @@ clearTxpMemPool txpData = do
 type family MempoolExt (m :: * -> *) :: *
 
 class Monad m => MonadTxpLocal m where
-    txpNormalize :: Genesis.Config -> TxpConfiguration -> m ()
+    txpNormalize :: Genesis.Config -> EpochOrSlot -> TxpConfiguration -> m ()
     txpProcessTx :: Genesis.Config -> EpochOrSlot -> TxpConfiguration -> (TxId, TxAux) -> m (Either ToilVerFailure ())
 
 type TxpLocalWorkMode ctx m =

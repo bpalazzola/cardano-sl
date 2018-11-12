@@ -29,6 +29,7 @@ import           Pos.Chain.Update (BlockVersionData)
 import           Pos.Core (Address, Coin, EpochIndex, Timestamp, mkCoin,
                      sumCoins, unsafeAddCoin, unsafeSubCoin)
 import           Pos.Core.Chrono (NewestFirst (..))
+import           Pos.Core.Slotting (EpochOrSlot)
 import           Pos.Crypto (ProtocolMagic, WithHash (..), hash)
 import           Pos.Explorer.Core (AddrHistory, TxExtra (..))
 import           Pos.Explorer.Txp.Toil.Monad (EGlobalToilM, ELocalToilM,
@@ -92,14 +93,15 @@ eRollbackToil bootStakeholders txun = do
 -- if transaction is valid.
 eProcessTx
     :: ProtocolMagic
+    -> EpochOrSlot
     -> TxpConfiguration
     -> BlockVersionData
     -> EpochIndex
     -> (TxId, TxAux)
     -> (TxUndo -> TxExtra)
     -> ExceptT ToilVerFailure ELocalToilM ()
-eProcessTx pm txpConfig bvd curEpoch tx@(id, aux) createExtra = do
-    undo <- mapExceptT extendLocalToilM $ Txp.processTx pm txpConfig bvd curEpoch tx
+eProcessTx pm eos txpConfig bvd curEpoch tx@(id, aux) createExtra = do
+    undo <- mapExceptT extendLocalToilM $ Txp.processTx pm eos txpConfig bvd curEpoch tx
     lift $ explorerExtraMToELocalToilM $ do
         let extra = createExtra undo
         putTxExtraWithHistory id extra $ getTxRelatedAddrs aux undo
@@ -111,16 +113,17 @@ eProcessTx pm txpConfig bvd curEpoch tx@(id, aux) createExtra = do
 -- All valid transactions will be added to mem pool and applied to utxo.
 eNormalizeToil
     :: ProtocolMagic
+    -> EpochOrSlot
     -> TxpConfiguration
     -> BlockVersionData
     -> EpochIndex
     -> [(TxId, (TxAux, TxExtra))]
     -> ELocalToilM ()
-eNormalizeToil pm txpConfig bvd curEpoch txs = mapM_ normalize ordered
+eNormalizeToil pm eos txpConfig bvd curEpoch txs = mapM_ normalize ordered
   where
     ordered = fromMaybe txs $ topsortTxs wHash txs
     wHash (i, (txAux, _)) = WithHash (taTx txAux) i
-    normalize = runExceptT . uncurry (eProcessTx pm txpConfig bvd curEpoch) . repair
+    normalize = runExceptT . uncurry (eProcessTx pm eos txpConfig bvd curEpoch) . repair
     repair (i, (txAux, extra)) = ((i, txAux), const extra)
 
 ----------------------------------------------------------------------------
