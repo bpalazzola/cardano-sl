@@ -25,11 +25,12 @@ import           Pos.Chain.Txp (Tx (..), TxIn (..), TxOut (..), checkTx,
                      topsortTxs)
 import           Pos.Core (mkCoin)
 import           Pos.Core.Attributes (mkAttributes)
-import           Pos.Core.Slotting (EpochOrSlot)
+import           Pos.Core.Slotting (EpochIndex (..), EpochOrSlot (..),
+                     LocalSlotIndex (..), SlotId (..), epochOrSlotFromSlotId)
 import           Pos.Crypto (hash, whData, withHash)
 import           Pos.Util (_neHead)
 
-import           Test.Pos.Chain.Txp.Arbitrary ()
+import           Test.Pos.Chain.Txp.Arbitrary (genAddressBloatedTx)
 import           Test.Pos.Util.QuickCheck.Arbitrary (sublistN)
 
 spec :: Spec
@@ -37,6 +38,18 @@ spec = describe "Txp.Core" $ do
     describe "checkTx" $ do
         prop description_checkTxGood checkTxGood
         prop description_checkTxBad checkTxBad
+        prop description_checkTxBloatedBeforeEpoch $
+            forAll genAddressBloatedTx $ \ blTx ->
+            checkTxGood blTx beforeCutoffEpochIndex === True
+        prop description_checkTxBloatedAfterEpoch $
+            forAll genAddressBloatedTx $ \ blTx ->
+            checkTxGood blTx afterCutoffEpochIndex === False
+        prop description_checkTxBloatedAddBeforeSlotIndex $
+            forAll genAddressBloatedTx $ \ blTx ->
+            checkTxGood blTx beforeCutoffLocalSlotIndex === True
+        prop description_checkTxBloatedAddAfterSlotIndex $
+            forAll genAddressBloatedTx $ \ blTx ->
+            checkTxGood blTx afterCutoffLocalSlotIndex === False
     describe "topsortTxs" $ do
         prop "doesn't change the random set of transactions" $
             forAll (resize 10 $ arbitrary) $ \(NonNegative l) ->
@@ -58,7 +71,14 @@ spec = describe "Txp.Core" $ do
         "creates Tx if arguments are taken from valid Tx"
     description_checkTxBad =
         "doesn't create Tx with non-positive coins in outputs"
-
+    description_checkTxBloatedBeforeEpoch =
+        "creates a bloated Tx via Attributes AddrAttributes before cutoff epoch"
+    description_checkTxBloatedAfterEpoch =
+        "creates a bloated Tx via Attributes AddrAttributes after cutoff epoch"
+    description_checkTxBloatedAddBeforeSlotIndex =
+        "creates a bloated Tx via Attributes AddrAttributes before cutoff local slot index"
+    description_checkTxBloatedAddAfterSlotIndex =
+        "creates a bloated Tx via Attributes AddrAttributes after cutoff local slot index"
 checkTxGood :: Tx -> EpochOrSlot -> Bool
 checkTxGood tx eos = isRight $ checkTx eos tx
 
@@ -149,3 +169,26 @@ txGen size = do
     case checkTx eos tx of
         Left e   -> error $ "txGen: something went wrong: " <> e
         Right () -> pure tx
+
+-- Values that test when to enforce the
+-- Attributes size Tx validation rule
+
+beforeCutoffEpochIndex :: EpochOrSlot
+beforeCutoffEpochIndex =
+    epochOrSlotFromSlotId
+        $ SlotId (EpochIndex 99) (UnsafeLocalSlotIndex 0)
+
+beforeCutoffLocalSlotIndex :: EpochOrSlot
+beforeCutoffLocalSlotIndex =
+    epochOrSlotFromSlotId
+        $ SlotId (EpochIndex 100) (UnsafeLocalSlotIndex 4)
+
+afterCutoffEpochIndex :: EpochOrSlot
+afterCutoffEpochIndex =
+    epochOrSlotFromSlotId
+        $ SlotId (EpochIndex 101) (UnsafeLocalSlotIndex 0)
+
+afterCutoffLocalSlotIndex :: EpochOrSlot
+afterCutoffLocalSlotIndex =
+    epochOrSlotFromSlotId
+        $ SlotId (EpochIndex 100) (UnsafeLocalSlotIndex 6)

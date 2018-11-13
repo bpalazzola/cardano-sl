@@ -125,12 +125,7 @@ checkTx eos it =
                 ("output #"%int%" has invalid coin")
                 i
           )
-        , ( (eos < txUnknownAttritbutesCutoff || unknownAttributesLength (_txAttributes it) < 8000)
-          , sformat
-                ("size of Tx unknown attributes in input #"%int%" is too large")
-                i
-          )
-        , ( (eos < txUnknownAttritbutesCutoff || all (< 8000) (map unknownAttributesLength addrAttribs))
+        , ( eos < txAddressAttritbutesCutoff || all (< 10) (map unknownAttributesLength txOutAddrAttribs)
           , sformat
                 ("size of Address unknown attributes in input #"%int%" is too large")
                 i
@@ -140,13 +135,13 @@ checkTx eos it =
     txOutAddrAttribs = map addrAttributes txOutAddresses
 
 -- TODO: Discuss what the length limit should be.
--- TODO: Dicuss what `EpochIndex` or `SlotId` should be the cutoff.
+-- TODO: Dicuss what `EpochIndex`/`SlotId` should be the cutoff.
 -- EpochIndex or SlotId at which the Tx's unknown attributes will be limited to
 -- some predetermined length
-txUnknownAttritbutesCutoff :: EpochOrSlot
-txUnknownAttritbutesCutoff =
+txAddressAttritbutesCutoff :: EpochOrSlot
+txAddressAttritbutesCutoff =
     epochOrSlotFromSlotId
-        $ SlotId (EpochIndex 8161235215119745909) (UnsafeLocalSlotIndex 120)
+        $ SlotId (EpochIndex 100) (UnsafeLocalSlotIndex 5)
 
 
 --------------------------------------------------------------------------------
