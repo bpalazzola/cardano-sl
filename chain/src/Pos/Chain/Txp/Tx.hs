@@ -28,6 +28,7 @@ import           Data.Aeson (FromJSON (..), FromJSONKey (..),
 import           Data.Aeson.TH (defaultOptions, deriveJSON)
 import           Data.Aeson.Types (toJSONKeyText)
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.List.NonEmpty as NE
 import           Data.SafeCopy (base, deriveSafeCopySimple)
 import qualified Data.Text as T
 import           Formatting (Format, bprint, build, builder, int, sformat, (%))
@@ -46,7 +47,8 @@ import           Pos.Core.Attributes (Attributes, areAttributesKnown,
                      unknownAttributesLength)
 import           Pos.Core.Common (Address (..), Coin (..), checkCoin, coinF,
                      coinToInteger, decodeTextAddress, integerToCoin)
-import           Pos.Core.Slotting (EpochOrSlot)
+import           Pos.Core.Slotting (EpochIndex (..), EpochOrSlot,
+                     LocalSlotIndex (..), SlotId (..), epochOrSlotFromSlotId)
 import           Pos.Core.Util.LogSafe (SecureLog (..))
 import           Pos.Crypto (Hash, decodeAbstractHash, hash, hashHexF,
                      shortHashF)
@@ -123,15 +125,29 @@ checkTx eos it =
                 ("output #"%int%" has invalid coin")
                 i
           )
-        , ( eos > someLimit && unknownAttributesLength (_txAttributes it) > 1024
+        , ( (eos < txUnknownAttritbutesCutoff || unknownAttributesLength (_txAttributes it) < 8000)
           , sformat
-                ("size of unknown attribute in input #"%int%" is too large")
+                ("size of Tx unknown attributes in input #"%int%" is too large")
+                i
+          )
+        , ( (eos < txUnknownAttritbutesCutoff || all (< 8000) (map unknownAttributesLength addrAttribs))
+          , sformat
+                ("size of Address unknown attributes in input #"%int%" is too large")
                 i
           )
         ]
+    txOutAddresses = map txOutAddress (NE.toList (_txOutputs it))
+    txOutAddrAttribs = map addrAttributes txOutAddresses
 
-someLimit :: EpochOrSlot
-someLimit = error "someLimit :: EpochOrSlot"
+-- TODO: Discuss what the length limit should be.
+-- TODO: Dicuss what `EpochIndex` or `SlotId` should be the cutoff.
+-- EpochIndex or SlotId at which the Tx's unknown attributes will be limited to
+-- some predetermined length
+txUnknownAttritbutesCutoff :: EpochOrSlot
+txUnknownAttritbutesCutoff =
+    epochOrSlotFromSlotId
+        $ SlotId (EpochIndex 8161235215119745909) (UnsafeLocalSlotIndex 120)
+
 
 --------------------------------------------------------------------------------
 -- TxId
