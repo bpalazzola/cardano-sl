@@ -29,7 +29,7 @@ import           Universum
 
 import           Control.Lens (each, _Wrapped)
 import qualified Crypto.Random as Rand
-import           Formatting (sformat, (%))
+import           Formatting (sformat, shown, (%))
 import           Serokell.Util.Text (listJson)
 import           UnliftIO (MonadUnliftIO)
 
@@ -54,10 +54,10 @@ import           Pos.Core.Slotting (getEpochOrSlot)
 import           Pos.DB (MonadDB, MonadDBRead, MonadGState, SomeBatchOp (..))
 import           Pos.DB.Block.BListener (MonadBListener)
 import           Pos.DB.Block.GState.SanityCheck (sanityCheckDB)
-import           Pos.DB.BlockIndex (getTipHeader)
 import           Pos.DB.Block.Slog.Logic (BypassSecurityCheck (..),
                      MonadSlogApply, MonadSlogBase, ShouldCallBListener,
                      slogApplyBlocks, slogRollbackBlocks)
+import           Pos.DB.BlockIndex (getTipHeader)
 import           Pos.DB.Delegation (dlgApplyBlocks, dlgNormalizeOnRollback,
                      dlgRollbackBlocks)
 import qualified Pos.DB.GState.Common as GS (writeBatchGState)
@@ -70,6 +70,7 @@ import           Pos.DB.Update (UpdateBlock, UpdateContext, usApplyBlocks,
                      usNormalize, usRollbackBlocks)
 import           Pos.Util (Some (..), spanSafe)
 import           Pos.Util.Util (HasLens', lensOf)
+import           Pos.Util.Wlog (logInfo)
 
 -- | Set of basic constraints used by high-level block processing.
 type MonadBlockBase ctx m
@@ -137,6 +138,7 @@ normalizeMempool genesisConfig txpConfig = do
     -- That's because delegation mempool normalization is harder and is done
     -- within block application.
     eos <- getEpochOrSlot <$> getTipHeader
+    logInfo $ sformat ("normalizeMempool: Current `EpochOrSlot` is " % shown) eos
     sscNormalize genesisConfig
     txpNormalize genesisConfig eos txpConfig
     usNormalize (configBlockVersionData genesisConfig)
