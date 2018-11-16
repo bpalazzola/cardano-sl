@@ -26,7 +26,7 @@ import           Pos.Configuration (NodeConfiguration (..))
 import           Pos.Core.Common (Coeff (..), CoinPortion (..), SharedSeed (..),
                      TxFeePolicy (..), TxSizeLinear (..))
 import           Pos.Core.ProtocolConstants (VssMaxTTL (..), VssMinTTL (..))
-import           Pos.Core.Slotting (EpochIndex (..))
+import           Pos.Core.Slotting (EpochIndex (..), EpochOrSlot (..))
 import           Pos.Crypto.Configuration (ProtocolMagic (..),
                      ProtocolMagicId (..), RequiresNetworkMagic (..))
 import           Pos.Launcher.Configuration (Configuration (..),
@@ -152,6 +152,8 @@ testGoldenConf_NoNetworkMagicField = Configuration
         }
     , ccWallet = WalletConfiguration { ccThrottle = Nothing }
     , ccReqNetMagic = RequiresNoMagic
+    , ccAttResEpoch = EpochOrSlot . Left $ EpochIndex 999999999
+    , ccAddrAttSize = 128
     }
 
 tests :: IO Bool

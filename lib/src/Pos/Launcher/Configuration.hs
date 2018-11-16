@@ -38,6 +38,7 @@ import qualified Data.Text as Text
 import           Data.Time.Units (fromMicroseconds)
 import qualified Data.Yaml as Yaml
 import           Formatting (sformat, shown, (%))
+import           Numeric.Natural (Natural)
 
 import           Data.Aeson.Options (defaultOptions)
 import           System.FilePath (takeDirectory)
@@ -49,7 +50,8 @@ import           Pos.Chain.Genesis as Genesis (Config (..), GenesisData (..),
                      mkConfigFromStaticConfig, prettyGenesisJson)
 import           Pos.Core (Address, decodeTextAddress)
 import           Pos.Core.Conc (currentTime)
-import           Pos.Core.Slotting (Timestamp (..))
+import           Pos.Core.Slotting (EpochIndex (..), EpochOrSlot (..),
+                     Timestamp (..))
 import           Pos.Crypto (RequiresNetworkMagic (..))
 import           Pos.Util.AssertMode (inAssertMode)
 import           Pos.Util.Config (parseYamlConfig)
@@ -74,6 +76,8 @@ data Configuration = Configuration
     , ccNode        :: !NodeConfiguration
     , ccWallet      :: !WalletConfiguration
     , ccReqNetMagic :: !RequiresNetworkMagic
+    , ccAttResEpoch :: !EpochOrSlot
+    , ccAddrAttSize :: !Natural
     } deriving (Eq, Generic , Show)
 
 instance FromJSON Configuration where
@@ -107,6 +111,16 @@ instance FromJSON Configuration where
 
             -- else default to RequiresMagic
             | otherwise -> pure RequiresMagic
+        ccAttResEpoch <- if
+            -- If the "attribResrictEpoch" key is specified, use the mapped
+            -- value
+            | HM.member "attribResrictEpoch" o -> o .: "attribResrictEpoch"
+            | otherwise -> pure . EpochOrSlot . Left $ EpochIndex 999999999
+        ccAddrAttSize <- if
+            -- If the "addrAttribSize" key is specified, use the mapped
+            -- value
+            | HM.member "addrAttribSize" o -> o .: "addrAttribSize"
+            | otherwise -> pure 128
         pure $ Configuration {..}
 
 instance ToJSON Configuration where
@@ -225,6 +239,8 @@ withConfigurations mAssetLockPath dumpGenesisPath dumpConfig cfo act = do
                 (ccWallet cfg)
                 txpConfig
                 (ccReqNetMagic cfg)
+                (ccAttResEpoch cfg)
+                (ccAddrAttSize cfg)
             act genesisConfig (ccWallet cfg) txpConfig (ccNtp cfg)
 
 addAssetLock :: Set Address -> TxpConfiguration -> TxpConfiguration
@@ -253,16 +269,28 @@ printInfoOnStart ::
     -> WalletConfiguration
     -> TxpConfiguration
     -> RequiresNetworkMagic
+    -> EpochOrSlot
+    -> Natural
     -> m ()
-printInfoOnStart dumpGenesisPath dumpConfig genesisData genesisConfig ntpConfig walletConfig txpConfig rnm = do
-    whenJust dumpGenesisPath $ dumpGenesisData genesisData True
-    when dumpConfig $ dumpConfiguration genesisConfig ntpConfig walletConfig txpConfig rnm
-    printFlags
-    t <- currentTime
-    mapM_ logInfo $
-        [ sformat ("System start time is " % shown) $ gdStartTime genesisData
-        , sformat ("Current time is "%shown) (Timestamp t)
-        ]
+printInfoOnStart
+    dumpGenesisPath
+    dumpConfig
+    genesisData
+    genesisConfig
+    ntpConfig
+    walletConfig
+    txpConfig
+    rnm
+    eos
+    attSize = do
+        whenJust dumpGenesisPath $ dumpGenesisData genesisData True
+        when dumpConfig $ dumpConfiguration genesisConfig ntpConfig walletConfig txpConfig rnm eos attSize
+        printFlags
+        t <- currentTime
+        mapM_ logInfo $
+            [ sformat ("System start time is " % shown) $ gdStartTime genesisData
+            , sformat ("Current time is "%shown) (Timestamp t)
+            ]
 
 printFlags :: WithLogger m => m ()
 printFlags = do
@@ -287,20 +315,31 @@ dumpConfiguration
     -> WalletConfiguration
     -> TxpConfiguration
     -> RequiresNetworkMagic
+    -> EpochOrSlot
+    -> Natural
     -> m ()
-dumpConfiguration genesisConfig ntpConfig walletConfig txpConfig rnm = do
-    let conf =
-            Configuration
-            { ccGenesis = genesisConfig
-            , ccNtp = ntpConfig
-            , ccUpdate = updateConfiguration
-            , ccSsc = sscConfiguration
-            , ccDlg = dlgConfiguration
-            , ccTxp = txpConfig
-            , ccBlock = blockConfiguration
-            , ccNode = nodeConfiguration
-            , ccWallet = walletConfig
-            , ccReqNetMagic = rnm
-            }
-    putText . decodeUtf8 . Yaml.encode $ conf
-    exitSuccess
+dumpConfiguration
+    genesisConfig
+    ntpConfig
+    walletConfig
+    txpConfig
+    rnm
+    eos
+    attSize = do
+        let conf =
+                Configuration
+                { ccGenesis = genesisConfig
+                , ccNtp = ntpConfig
+                , ccUpdate = updateConfiguration
+                , ccSsc = sscConfiguration
+                , ccDlg = dlgConfiguration
+                , ccTxp = txpConfig
+                , ccBlock = blockConfiguration
+                , ccNode = nodeConfiguration
+                , ccWallet = walletConfig
+                , ccReqNetMagic = rnm
+                , ccAttResEpoch = eos
+                , ccAddrAttSize = attSize
+                }
+        putText . decodeUtf8 . Yaml.encode $ conf
+        exitSuccess

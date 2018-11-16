@@ -58,6 +58,8 @@ dev: &dev
         heavyDelegation: {}
         avvmDistr: {}
     requiresNetworkMagic: RequiresNoMagic
+    attribResrictEpoch: 999999999
+    addrAttribSize: 128
     dbSerializeVersion: 0
 
   ntp: &dev_ntp
