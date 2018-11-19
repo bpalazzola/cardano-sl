@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase    #-}
 {-# LANGUAGE RankNTypes    #-}
 {-# LANGUAGE TupleSections #-}
 
@@ -161,19 +162,19 @@ transactionSpecs wRef wc = beforeAll_ (setupLogging "wallet-new_transactionSpecs
                         <> show err
 
         randomTest "fails if you don't have any money" 1 $ run $ do
-            (wallet, account) <- fixtureWallet Nothing
+            (wallet, account) <- fixtureWallet []
             resp <- makePayment (Core.mkCoin 14) (wallet, account) =<< getRandomAddress
             let err = NotEnoughMoney (ErrAvailableBalanceIsInsufficient 0)
             expectFailure (ClientWalletError err) resp
 
         randomTest "fails if you spend more money than your available balance" 1 $ run $ do
-            (wallet, account) <- fixtureWallet (Just $ Core.mkCoin 42)
+            (wallet, account) <- fixtureWallet (Core.mkCoin <$> [42])
             resp <- makePayment (Core.mkCoin 10000) (wallet, account) =<< getRandomAddress
             let err = NotEnoughMoney (ErrAvailableBalanceIsInsufficient 42)
             expectFailure (ClientWalletError err) resp
 
         randomTest "fails if you can't cover fee with a transaction" 1 $ run $ do
-            (wallet, account) <- fixtureWallet (Just $ Core.mkCoin 42)
+            (wallet, account) <- fixtureWallet (Core.mkCoin <$> [42])
             resp <- makePayment (Core.mkCoin 42) (wallet, account) =<< getRandomAddress
             let err = NotEnoughMoney ErrCannotCoverFee
             expectFailure (ClientWalletError err) resp
@@ -221,6 +222,20 @@ transactionSpecs wRef wc = beforeAll_ (setupLogging "wallet-new_transactionSpecs
             let utxoStatisticsExpected = computeUtxoStatistics log10 utxos
             liftIO $ utxoStatistics `shouldBe` utxoStatisticsExpected
 
+        randomTest "no extra inputs, no extra change" 1 $ run $ do
+            source <- fixtureWallet (Core.mkCoin <$> [200000])
+            resp <- makePayment (Core.mkCoin 1) source =<< getRandomAddress
+            expectConfirmation source resp
+
+        randomTest "fee calculation: needs extra inputs, no extra change" 1 $ run $ do
+            source <- fixtureWallet (Core.mkCoin <$> [100000, 100000])
+            resp <- makePayment (Core.mkCoin 1) source =<< getRandomAddress
+            expectConfirmation source resp
+
+            -- a: 155381 # absolute minimal fees per transaction
+            -- b: 43.946 # additional minimal fees per byte of transaction size
+
+
   where
     makePayment
         :: Core.Coin
@@ -250,18 +265,16 @@ transactionSpecs wRef wc = beforeAll_ (setupLogging "wallet-new_transactionSpecs
         return (unV1 $ addrId toAddr)
 
     fixtureWallet
-        :: Maybe Core.Coin
+        :: [Core.Coin]
         -> IO (Wallet, Account)
-    fixtureWallet mcoin = do
+    fixtureWallet coins = do
         genesis <- genesisWallet wc
         (genesisAccount, _) <- firstAccountAndId wc genesis
         wallet <- randomWallet CreateWallet >>= createWalletCheck wc
         (account, address) <- firstAccountAndId wc wallet
-        case mcoin of
-            Nothing   -> return ()
-            Just coin -> do
-                txn <- makePayment coin (genesis, genesisAccount) (unV1 $ addrId address) >>= shouldPrismFlipped _Right
-                pollTransactions wc (walId wallet) (accIndex account) (txId txn)
+        forM_ coins $ \coin -> do
+            txn <- makePayment coin (genesis, genesisAccount) (unV1 $ addrId address) >>= shouldPrismFlipped _Right
+            pollTransactions wc (walId wallet) (accIndex account) (txId txn)
         return (wallet, account)
 
     expectFailure
@@ -272,6 +285,16 @@ transactionSpecs wRef wc = beforeAll_ (setupLogging "wallet-new_transactionSpecs
     expectFailure want eresp = do
         resp <- eresp `shouldPrism` _Left
         resp `shouldBe` want
+
+    expectConfirmation
+        :: (Wallet, Account)
+        -> Either ClientError Transaction
+        -> IO ()
+    expectConfirmation (wallet, account) = \case
+        Left err ->
+            fail $ "Expected transcation confirmation, but got a ClientError: " <> show err
+        Right txn ->
+            pollTransactions wc (walId wallet) (accIndex account) (txId txn)
 
     shouldBeConfirmed
         :: Transaction

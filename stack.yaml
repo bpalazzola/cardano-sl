@@ -327,7 +327,7 @@ ghc-options:
   cardano-sl-util:              -Wall -Werror -Wcompat -fwarn-redundant-constraints
   cardano-sl-util-test:         -Wall -Werror -Wcompat -fwarn-redundant-constraints
   cardano-sl-wallet:            -Wall -Werror -Wcompat -fwarn-redundant-constraints
-  cardano-sl-wallet-new:        -Wall -Werror -Wcompat -fwarn-redundant-constraints
+  # cardano-sl-wallet-new:        -Wall -Werror -Wcompat -fwarn-redundant-constraints
   cardano-sl-node-ipc:          -Wall -Werror -Wcompat -fwarn-redundant-constraints
   cardano-sl-x509:              -Wall -Werror -Wcompat -fwarn-redundant-constraints
   cardano-sl-cluster:           -Wall -Werror -Wcompat -fwarn-redundant-constraints

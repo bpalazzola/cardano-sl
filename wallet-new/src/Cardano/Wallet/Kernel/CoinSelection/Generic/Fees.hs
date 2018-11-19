@@ -79,7 +79,7 @@ type PickUtxo m utxo
 -- percentage of the fee (depending on how many change outputs the
 -- algorithm happened to choose).
 adjustForFees
-    :: forall utxo m. (CoinSelDom (Dom utxo), Monad m)
+    :: forall utxo m. (Show (Output (Dom utxo)), Show (UtxoEntry (Dom utxo)), Show (Value (Dom utxo)), CoinSelDom (Dom utxo), Monad m)
     => FeeOptions (Dom utxo)
     -> PickUtxo m utxo
     -> [CoinSelResult (Dom utxo)]
@@ -94,7 +94,7 @@ adjustForFees feeOptions pickUtxo css = do
           ReceiverPaysFee ->
             coinSelLiftExcept $ receiverPaysFee feeOptions inps outs chgs
 
-          SenderPaysFee ->
+          SenderPaysFee -> traceShow inps $ traceShow outs $ traceShow chgs $
             senderPaysFee pickUtxo feeOptions inps outs chgs
 
     let neInps = case inps' of
@@ -140,7 +140,7 @@ receiverPaysFee feeOptions inps outs chgs = do
 -------------------------------------------------------------------------------}
 
 senderPaysFee
-    :: forall utxo m. (Monad m, CoinSelDom (Dom utxo))
+    :: forall utxo m. (Show (Output (Dom utxo)), Show (UtxoEntry (Dom utxo)), Show (Value (Dom utxo)), Monad m, CoinSelDom (Dom utxo))
     => PickUtxo m utxo
     -> FeeOptions (Dom utxo)
     -> [UtxoEntry (Dom utxo)]
@@ -159,7 +159,7 @@ senderPaysFee pickUtxo feeOptions = go
         let fee = feeUpperBound feeOptions inps outs chgs
 
         -- 2/ Substract fee from all change outputs, proportionally to their value.
-        let (chgs', remainingFee) = reduceChangeOutputs removeDust fee chgs
+        let (chgs', remainingFee) = reduceChangeOutputs removeDust (trace ("SENDER PAYS FEE: " <> pretty fee) fee) chgs
 
         -- 3.1/
         -- Should the change cover the fee, we're done.
